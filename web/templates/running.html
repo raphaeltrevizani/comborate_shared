@@ -1,6 +1,9 @@
 Running ComboRATE…
+
 <script>
-setTimeout(() => {
-  window.location = "/ready/{{ run_id }}";
-}, 1000);
+setInterval(async () => {
+  const r = await fetch("/status/{{ run_id }}");
+  const j = await r.json();
+  if (j.ready) window.location = "/ready/{{ run_id }}";
+}, 2000);
 </script>

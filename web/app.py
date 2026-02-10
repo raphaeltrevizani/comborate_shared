@@ -58,11 +58,17 @@ def run():
 		cmd += ["-c", request.form["prediction_cutoff"]]
 
 	# subprocess.run(cmd, capture_output=True, text=True)
-	Thread(target=subprocess.run, args=(cmd,), kwargs={"capture_output": True, "text": True}).start()
+	# Thread(target=subprocess.run, args=(cmd,), kwargs={"capture_output": True, "text": True}).start()
+	def job():
+		subprocess.run(cmd, capture_output=True, text=True)
+		zip_path = shutil.make_archive(str(out_dir), "zip", root_dir=str(out_dir))
+		Path(zip_path).replace(run_dir / "result.zip")
+
+	Thread(target=job).start()
 
 
-	zip_path = shutil.make_archive(str(out_dir), "zip", root_dir=str(out_dir))
-	Path(zip_path).replace(run_dir / "result.zip")
+	# zip_path = shutil.make_archive(str(out_dir), "zip", root_dir=str(out_dir))
+	# Path(zip_path).replace(run_dir / "result.zip")
 
 	# return render_template("ready.html", run_id=run_id)
 	return render_template("running.html", run_id=run_id)
@@ -72,6 +78,12 @@ def run():
 @app.route("/ready/<run_id>", methods=["GET"])
 def ready(run_id):
 	return render_template("ready.html", run_id=run_id)
+
+
+@app.route("/status/<run_id>")
+def status(run_id):
+    zip_path = UPLOAD_DIR / run_id / "result.zip"
+    return {"ready": zip_path.exists()}
 
 
 @app.route("/download/<run_id>", methods=["GET"])
