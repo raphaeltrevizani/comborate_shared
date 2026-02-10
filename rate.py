@@ -9,14 +9,7 @@ import numpy as np
 # -----------------------------------------------------------------------------
 def res2bin(df_res_txt, cutoff):
 
-	# Set values below cutoff to 0
-	cols = [col for col in df_res_txt.columns if 'Donor' in col]
-	dx = df_res_txt[cols]
-	dx = dx.astype('Int64')
-
-	# Set values above 0 to 1
 	df_res_bin = deepcopy(df_res_txt)
-	df_res_bin[cols] = dx.ne(0).astype('boolean').mask(dx.isna()).astype('Int64')
 
 	# Tidy up
 	df_res_bin = df_res_bin.drop(columns=['Peptide #', 'Peptide_ID'])
@@ -26,6 +19,9 @@ def res2bin(df_res_txt, cutoff):
 
 	# Apply cutoff
 	df_res_bin[df_res_bin < cutoff] = 0
+	
+	# Set values above 0 to 1
+	df_res_bin = df_res_bin.ne(0).astype('boolean').mask(df_res_bin.isna()).astype('Int64')
 	
 	return df_res_bin
 # -----------------------------------------------------------------------------
