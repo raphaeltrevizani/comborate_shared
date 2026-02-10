@@ -5,6 +5,7 @@ from pathlib import Path
 from datetime import datetime
 import uuid
 import shutil
+from threading import Thread
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 
@@ -56,7 +57,9 @@ def run():
 	if request.form.get("prediction_cutoff"):
 		cmd += ["-c", request.form["prediction_cutoff"]]
 
-	subprocess.run(cmd, capture_output=True, text=True)
+	# subprocess.run(cmd, capture_output=True, text=True)
+	Thread(target=subprocess.run, args=(cmd,), kwargs={"capture_output": True, "text": True}).start()
+
 
 	zip_path = shutil.make_archive(str(out_dir), "zip", root_dir=str(out_dir))
 	Path(zip_path).replace(run_dir / "result.zip")
