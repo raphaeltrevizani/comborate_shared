@@ -65,6 +65,11 @@ def run():
 	return render_template("running.html", run_id=run_id)
 
 
+@app.route("/ready/<run_id>")
+def ready(run_id):
+    return render_template("ready.html", run_id=run_id)
+
+
 @app.route("/ready/<run_id>", methods=["GET"])
 def ready(run_id):
 	return render_template("ready.html", run_id=run_id)
