@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Comborate Runner</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<h1>ComboRATE</h1>
+
+<h2>Instructions</h2>
+<p>Format the allele file and the response according to the instructions of the  <a href="https://tools.iedb.org/rate/example/" target="_blank">RATE program</a><br>
+A sample allele data input file can be downloaded from <a href="https://tools.iedb.org/static/rate/files/iedb-rate_sample_input_allele_data.txt">here</a>.<br>
+A sample response data input file can be downloaded from <a href="https://tools.iedb.org/static/rate/files/iedb-rate_sample_input_response_data.txt">here</a>.<br>
+</p>
+
+<form method="post" action="/run" enctype="multipart/form-data">
+
+	<label>
+	Allele file<br>
+	<input type="file" name="allele" required>
+	</label><br><br>
+
+	<label>
+	Response file<br>
+	<input type="file" name="response" required>
+	</label><br><br>
+
+	<label>
+	Prediction file (optional)<br>
+	<input type="file" name="prediction">
+	</label><br><br>
+
+	<label>
+	Response cutoff (eg: 1,2,3) <br>
+	<input name="response_cutoff" placeholder="Default: 1">
+	</label><br><br>
+
+	<label>
+	Prediction cutoff<br>
+	<input name="prediction_cutoff" placeholder="Default: 25">
+	</label><br><br>
+
+	<button type="submit">Run</button>
+</form>
+
+</body>
+</html>
+
