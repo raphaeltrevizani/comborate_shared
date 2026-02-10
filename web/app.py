@@ -61,7 +61,7 @@ def run():
 	zip_path = shutil.make_archive(str(out_dir), "zip", root_dir=str(out_dir))
 	Path(zip_path).replace(run_dir / "result.zip")
 
-	return redirect(url_for("ready", run_id=run_id))
+	return render_template("ready.html", run_id=run_id)
 
 
 @app.route("/ready/<run_id>", methods=["GET"])
