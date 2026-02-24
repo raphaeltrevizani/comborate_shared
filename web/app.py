@@ -73,7 +73,6 @@ def run():
 		str(response_path)
 	]
 
-
 	def job():
 		subprocess.run(cmd, capture_output=True, text=True)
 		subprocess.run(cmd2, capture_output=True, text=True)
