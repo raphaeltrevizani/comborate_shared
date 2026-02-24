@@ -14,7 +14,6 @@ A sample allele data input file can be downloaded from <a href="https://tools.ie
 A sample response data input file can be downloaded from <a href="https://tools.iedb.org/static/rate/files/iedb-rate_sample_input_response_data.txt">here</a>.<br>
 The prediction file must be in .csv format and can be obtained by running any of the methods from the <a href="https://tools.iedb.org/mhcii/"> IEDB/AR suite.</a><br>
 </p>
-
 <form method="post" action="/run" enctype="multipart/form-data">
 
 	<label>
@@ -43,13 +42,14 @@ The prediction file must be in .csv format and can be obtained by running any of
 	</label><br><br>
 
 	<label style="display:inline-flex; align-items:center; gap:6px;">
-	<span>Pair alpha/beta chains</span>
-	<input type="checkbox" name="pair_chains" checked>
+		<span>Pair alpha/beta chains</span>
+		<input type="checkbox" name="pair_chains" checked>
 	</label>
+	<br><br>
 
 	<button type="submit">Run</button>
-</form>
 
+</form>
 </body>
 </html>
 
