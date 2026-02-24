@@ -10,6 +10,7 @@ from threading import Thread
 app = Flask(__name__, template_folder="templates", static_folder="static")
 
 SCRIPT_PATH = Path(__file__).resolve().parent.parent / "comborate.py"
+SUMMARY_PATH = Path(__file__).resolve().parent.parent / "count_donors.py"
 BASE_DIR = Path(__file__).resolve().parent
 UPLOAD_DIR = BASE_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -57,10 +58,25 @@ def run():
 	if request.form.get("prediction_cutoff"):
 		cmd += ["-c", request.form["prediction_cutoff"]]
 
+	if request.form.get("pair_chains"):
+		cmd.append("-x")
+
 	# subprocess.run(cmd, capture_output=True, text=True)
 	# Thread(target=subprocess.run, args=(cmd,), kwargs={"capture_output": True, "text": True}).start()
+
+
+	cmd2 = [
+		sys.executable,
+		str(SUMMARY_PATH),
+		str(out_dir),
+		str(allele_path),
+		str(response_path)
+	]
+
+
 	def job():
 		subprocess.run(cmd, capture_output=True, text=True)
+		subprocess.run(cmd2, capture_output=True, text=True)
 		zip_path = shutil.make_archive(str(out_dir), "zip", root_dir=str(out_dir))
 		Path(zip_path).replace(run_dir / "result.zip")
 
