@@ -7,6 +7,7 @@ import os
 import pandas as pd
 from os.path import join
 import argparse
+import combineAB
 
 # Adds the src directory to the python path
 src_dir = join(os.getcwd(), 'src')
@@ -177,7 +178,7 @@ def rate_execution(df_res_bin, df_hla_bin, binders_list:list):
 	return df_rate
 
 # -----------------------------------------------------------------------------
-def write_output_files(df_rate_original, df_pred, output_d, pepnum, response_cutoff):
+def write_output_files(dfrate, df_pred, output_d, pepnum, response_cutoff, relfreq_cutoff, pval_cutoff):
 	
 	'''
 		Outputs all information to two files
@@ -187,10 +188,14 @@ def write_output_files(df_rate_original, df_pred, output_d, pepnum, response_cut
 
 	# Add a column with the cutoff
 	response_cutoff = str(response_cutoff)
-	df_rate_original['Response_cutoff'] = response_cutoff
+	dfrate['Response_cutoff'] = response_cutoff
 
-	df_rate_original = df_rate_original.sort_values('Fisher_pval')
-	df_rate_original.to_csv(join(output_d, pepnum + '_rate.csv'), index=None)
+	dfrate = dfrate.sort_values('Fisher_pval')
+
+	dfrate = dfrate[dfrate['Relative_freq'] >= relfreq_cutoff]
+	dfrate = dfrate[dfrate['Fisher_pval'] <= pval_cutoff]
+
+	dfrate.to_csv(join(output_d, pepnum + '_rate.csv'), index=None)
 	
 	if not df_pred.empty:
 		df_pred.to_csv(join(output_d, pepnum +  '_pred.csv'), index=None)
@@ -211,6 +216,10 @@ def parse_cmd_line():
 	cmd_parse.add_argument('-p', '--prediction', required=False, type=str, help='HLA prediction file name', default=False)
 	cmd_parse.add_argument('-c', '--rank-cutoff', required=False, type=float, help='Cutoff for the binding rank (default = 25)', default=25)
 	cmd_parse.add_argument('-k', '--response-cutoff', required=False, type=str, help='Cutoff for the response (default = 1)', default=1)
+	cmd_parse.add_argument('-v', '--p-value', required=False, type=float, help='Cutoff for the p-value (default = 0.05)', default=0.05)
+	cmd_parse.add_argument('-f', '--rel-freq', required=False, type=float, help='Cutoff for the Relative Frequency (default = 1)', default=1)
+	cmd_parse.add_argument('-x', '--combine-AB-chains', required=False, action='store_true', help='Combine alpha and beta chains', default=False)
+
 
 	return cmd_parse.parse_args()
 # -----------------------------------------------------------------------------
@@ -226,6 +235,9 @@ if __name__ == '__main__':
 	output_d = arg.output
 	rank_cut = arg.rank_cutoff 
 	response_cutoffs = arg.response_cutoff
+	rf_cutoff = arg.rel_freq 
+	p_cutoff = arg.p_value
+	combine_chains = arg.combine_AB_chains
 
 	# Create output path
 	os.makedirs(output_d, exist_ok=True)
@@ -233,6 +245,9 @@ if __name__ == '__main__':
 	# Parse input files
 	df_res_orig = pd.read_csv(response, sep='\t').dropna(how='all')
 	df_hla_orig = pd.read_csv(hla_file, sep='\t')
+
+	if combine_chains:
+		df_hla_orig = combineAB.make_AB_combinations(df_hla_orig)
 
 	# Iterate over each peptide
 	pepmax = int(df_res_orig['Peptide #'].max())
@@ -284,7 +299,7 @@ if __name__ == '__main__':
 			
 			# In case RATE results are empty, create empty output files
 			if df_rate.empty:
-				write_output_files(df_rate_original, df_pred, output_dir_cutoff, pepnum, response_cutoff)
+				write_output_files(df_rate_original, df_pred, output_dir_cutoff, pepnum, response_cutoff, rf_cutoff, p_cutoff)
 				continue
 
 			# Groups HLAs while p-values decrease
@@ -318,7 +333,7 @@ if __name__ == '__main__':
 				iteration += 1
 
 			# Writes output files for this peptide
-			write_output_files(df_rate_original, df_pred, output_dir_cutoff, pepnum, response_cutoff)
+			write_output_files(df_rate_original, df_pred, output_dir_cutoff, pepnum, response_cutoff, rf_cutoff, p_cutoff)
 
 
 create_summary_files(output_d)
