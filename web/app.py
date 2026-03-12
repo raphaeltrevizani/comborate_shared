@@ -58,6 +58,9 @@ def run():
 	if request.form.get("prediction_cutoff"):
 		cmd += ["-c", request.form["prediction_cutoff"]]
 
+	if request.form.get("pval"):
+		cmd += ["-v", request.form["pval"]]
+
 	if request.form.get("pair_chains"):
 		cmd.append("-x")
 
