@@ -13,6 +13,8 @@
 A sample allele data input file can be downloaded from <a href="https://tools.iedb.org/static/rate/files/iedb-rate_sample_input_allele_data.txt">here</a>.<br>
 A sample response data input file can be downloaded from <a href="https://tools.iedb.org/static/rate/files/iedb-rate_sample_input_response_data.txt">here</a>.<br>
 The prediction file must be in .csv format and can be obtained by running any of the methods from the <a href="https://tools.iedb.org/mhcii/"> IEDB/AR suite.</a><br>
+Autorun binding prediction: automatically runs NetMHCIIpan (no need to supply your own prediction file)
+Pair chains: automatically pair DQA/DQB and DPA/DPB chains
 </p>
 <form method="post" action="/run" enctype="multipart/form-data">
 
@@ -37,7 +39,7 @@ The prediction file must be in .csv format and can be obtained by running any of
 	</label><br><br>
 
 	<label style="display:inline-block; white-space:nowrap;">
-		Autorun prediction<input type="checkbox" name="autorun_prediction" checked style="margin-left:-14px;">
+		Autorun binding prediction<input type="checkbox" name="autorun_prediction"  style="margin-left:-14px;">
 	</label>
 	<br><br>
 
