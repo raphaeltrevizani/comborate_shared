@@ -8,7 +8,7 @@ import pandas as pd
 from os.path import join
 import argparse
 import combineAB
-
+import subprocess
 # Adds the src directory to the python path
 src_dir = join(os.getcwd(), 'src')
 sys.path.append(src_dir)
@@ -100,6 +100,7 @@ def parse_prediction_file(binder_file, peptide:str=None, sep=','):
 	'''
 
 	df = pd.read_csv(binder_file, sep=sep)
+
 	if peptide is not None:
 		df = df[df['peptide'] == peptide]
 
@@ -203,6 +204,77 @@ def write_output_files(dfrate, df_pred, output_d, pepnum, response_cutoff, relfr
 	return
 
 # -----------------------------------------------------------------------------
+def get_hla_class(hla):
+
+	'''
+		Returns the class of arg:hla
+	'''
+
+	hla = hla.replace('HLA-', '')
+
+	if 'DP' in hla or 'DQ' in hla or 'DR' in hla:
+		return 'II'
+	elif 'A' or 'B' or 'C' in hla: 
+		return 'I'
+
+# -----------------------------------------------------------------------------
+def group_by_hla_class(hla_list):
+	
+	grouped_hlas = {'I':[], 'II':[]}
+
+	for hla in hla_list:
+		grouped_hlas[get_hla_class(hla)] += [hla]
+
+	return grouped_hlas
+
+# -----------------------------------------------------------------------------
+def parse_allowed_alleles():
+	with open('alleles_name.list') as inp:
+		next(inp)
+		data = inp.readlines()
+	data = [line.replace('\n', ',').replace('\t', ',').replace(' ', '').replace(',,', ',').split(',') for line in data]
+	data = [item for sublist in data for item in sublist if item != '']
+	return data
+
+# -----------------------------------------------------------------------------
+def submit_cmd_to_API_classII(peptides, hlas, sizes):
+
+	method = 'netmhciipan_el'
+	mhc_class = 'ii'
+
+	command = "curl --data \"method=" + method + "&sequence_text="+peptides+"&allele=" + hlas + "&length="+ sizes +"\" https://tools-cluster-interface.iedb.org/tools_api/mhc"+mhc_class+"/"
+	result = subprocess.run(command, shell=True, capture_output=True, text=True)
+
+	output = result.stdout
+	errors = result.stderr
+
+	return output
+# -----------------------------------------------------------------------------
+def run_API_class_II(peptides, hlalist, outputname):
+
+	# Add flanking characters needed by the API query
+	peptides = ''.join(['%3Epeptide' + str(num) + '%0A' + pep.rstrip() + '%0A' for num, pep in enumerate(peptides, start = 1)])
+
+	# hlalist.remove('DRB3*03:02')
+	hlas = ','.join(list(set(hlalist)))
+
+	# TODO group peptide by sizes and run each size separate
+
+	sizes = '15'
+	output = submit_cmd_to_API_classII(peptides, hlas, sizes)
+
+	# Dealing with invalid HLAs
+	while 'Invalid' in output:
+		invalid_hla = output.split('\n')[0].split()[-2]
+		hlalist.remove(invalid_hla)
+		hlas = ','.join(list(set(hlalist)))
+		output = submit_cmd_to_API_classII(peptides, hlas, sizes)
+
+	with open(outputname, 'w') as out:
+		out.write(output.replace('\t', ','))
+
+	return
+# -----------------------------------------------------------------------------
 def parse_cmd_line():
 
 	cmd_parse = argparse.ArgumentParser(description='Iteratively group HLAs to lower RATE p-value')
@@ -214,6 +286,7 @@ def parse_cmd_line():
 	
 	# Optional
 	cmd_parse.add_argument('-p', '--prediction', required=False, type=str, help='HLA prediction file name', default=False)
+	cmd_parse.add_argument('-q', '--auto-prediction', required=False, action='store_true', help='Automatically run HLA prediction', default=False)
 	cmd_parse.add_argument('-c', '--rank-cutoff', required=False, type=float, help='Cutoff for the binding rank (default = 25)', default=25)
 	cmd_parse.add_argument('-k', '--response-cutoff', required=False, type=str, help='Cutoff for the response (default = 1)', default=1)
 	cmd_parse.add_argument('-v', '--p-value', required=False, type=float, help='Cutoff for the p-value (default = 0.05)', default=0.05)
@@ -237,7 +310,9 @@ if __name__ == '__main__':
 	response_cutoffs = arg.response_cutoff
 	rf_cutoff = arg.rel_freq 
 	p_cutoff = arg.p_value
+	autopred = arg.auto_prediction
 	combine_chains = arg.combine_AB_chains
+
 
 	# Create output path
 	os.makedirs(output_d, exist_ok=True)
@@ -245,6 +320,25 @@ if __name__ == '__main__':
 	# Parse input files
 	df_res_orig = pd.read_csv(response, sep='\t').dropna(how='all')
 	df_hla_orig = pd.read_csv(hla_file, sep='\t')
+
+	tmp_predfile = ''
+
+	if autopred:
+		## Running API prediction
+
+		# Get peptides from df
+		peptides = df_res_orig['Peptide_Seq'].drop_duplicates().to_list()
+
+		# Get HLAs from df
+		flat_list_hlas = [item for sublist in df_hla_orig.values for item in sublist if not pd.isna(item)]
+
+		# ID the HLA class
+		hla_class = list(set([get_hla_class(hla) for hla in flat_list_hlas]))[0]
+		
+		if hla_class == 'II':
+			tmp_predfile = 'prediction_MHC_II.tsv'
+			run_API_class_II(peptides, flat_list_hlas, tmp_predfile)
+			predfile = tmp_predfile
 
 	if combine_chains:
 		df_hla_orig = combineAB.make_AB_combinations(df_hla_orig)
@@ -338,3 +432,5 @@ if __name__ == '__main__':
 
 create_summary_files(output_d)
 
+if tmp_predfile:
+	os.remove(tmp_predfile)
