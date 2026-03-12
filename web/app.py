@@ -55,6 +55,9 @@ def run():
 	response_cutoff = request.form.get("response_cutoff") or "1"
 	cmd += ["-k", response_cutoff]
 
+	if request.form.get("autorun_prediction"):
+		cmd.append("-q")
+
 	if request.form.get("prediction_cutoff"):
 		cmd += ["-c", request.form["prediction_cutoff"]]
 
