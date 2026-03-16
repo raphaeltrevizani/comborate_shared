@@ -265,7 +265,7 @@ def run_API_class_II(peptides, hlalist, outputname):
 
 	# Dealing with invalid HLAs
 	while 'Invalid' in output:
-		invalid_hla = output.split('\n')[0].split()[-2]
+		invalid_hla = output.split('\n')[0].split()[-2].replace('-', '/')
 		hlalist.remove(invalid_hla)
 		hlas = ','.join(list(set(hlalist)))
 		output = submit_cmd_to_API_classII(peptides, hlas, sizes)
@@ -288,7 +288,7 @@ def parse_cmd_line():
 	cmd_parse.add_argument('-p', '--prediction', required=False, type=str, help='HLA prediction file name', default=False)
 	cmd_parse.add_argument('-q', '--auto-prediction', required=False, action='store_true', help='Automatically run HLA prediction', default=False)
 	cmd_parse.add_argument('-c', '--rank-cutoff', required=False, type=float, help='Cutoff for the binding rank (default = 25)', default=25)
-	cmd_parse.add_argument('-k', '--response-cutoff', required=False, type=str, help='Cutoff for the response (default = 1)', default=1)
+	cmd_parse.add_argument('-k', '--response-cutoff', required=False, type=str, help='Cutoff for the response (default = 1)', default='1')
 	cmd_parse.add_argument('-v', '--p-value', required=False, type=float, help='Cutoff for the p-value (default = 0.05)', default=0.05)
 	cmd_parse.add_argument('-f', '--rel-freq', required=False, type=float, help='Cutoff for the Relative Frequency (default = 1)', default=1)
 	cmd_parse.add_argument('-x', '--combine-AB-chains', required=False, action='store_true', help='Combine alpha and beta chains', default=False)
