@@ -319,13 +319,8 @@ if __name__ == '__main__':
 
 	# Parse input files
 	df_res_orig = pd.read_csv(response, sep='\t').dropna(how='all')
-	
-	with open(hla_file) as f:
-		cols = f.readline().rstrip('\n').split('\t')
+	df_hla_orig = pd.read_csv(hla_file, sep='\t', dtype=str)
 
-	# Parses header (if they are numbers, pandas will use floats which crashes later)
-	df_hla_orig = pd.read_csv(hla_file, sep='\t', dtype=str, skiprows=1, names=cols)
-	df_hla_orig.columns = df_hla_orig.columns.map(str)
 
 	tmp_predfile = ''
 
