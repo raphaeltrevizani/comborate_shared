@@ -237,6 +237,20 @@ def parse_allowed_alleles():
 	return data
 
 # -----------------------------------------------------------------------------
+def submit_cmd_to_API_classI(peptides, hlas, sizes):
+
+	method = 'netmhcpan_el'
+	mhc_class = 'i'
+
+	command = "curl --data \"method=" + method + "&sequence_text="+peptides+"&allele=" + hlas + "&length="+ sizes +"\" https://tools-cluster-interface.iedb.org/tools_api/mhc"+mhc_class+"/"
+	result = subprocess.run(command, shell=True, capture_output=True, text=True)
+	
+	output = result.stdout
+	errors = result.stderr
+
+	return output
+
+# -----------------------------------------------------------------------------
 def submit_cmd_to_API_classII(peptides, hlas, sizes):
 
 	method = 'netmhciipan_el'
@@ -249,29 +263,53 @@ def submit_cmd_to_API_classII(peptides, hlas, sizes):
 	errors = result.stderr
 
 	return output
+
+# -----------------------------------------------------------------------------
+def parse_valid_hla_file():
+	with open('valid_hlas.txt') as inputfile:
+		return inputfile.read().splitlines()
+	
+# -----------------------------------------------------------------------------
+def run_API_class_I(peptides, hlalist, outputname):
+
+	# Add flanking characters needed by the API query
+	peptides = ''.join(['%3Epeptide' + str(num) + '%0A' + pep.rstrip() + '%0A' for num, pep in enumerate(peptides, start = 1)])
+
+	valid_hlas = parse_valid_hla_file()
+
+	mod_hlalist = ['HLA-' + hla for hla in list(set(hlalist))]
+	mod_hlalist = [hla for hla in mod_hlalist if hla in valid_hlas]
+
+	hlas = ','.join(mod_hlalist)
+	sizes = ','.join('9' * len(mod_hlalist))
+
+	output = submit_cmd_to_API_classI(peptides, hlas, sizes)
+
+	with open(outputname, 'w') as out:
+		out.write(output.replace('\t', ',').replace('percentile_rank', 'rank'))
+	
+	return
+
 # -----------------------------------------------------------------------------
 def run_API_class_II(peptides, hlalist, outputname):
 
 	# Add flanking characters needed by the API query
 	peptides = ''.join(['%3Epeptide' + str(num) + '%0A' + pep.rstrip() + '%0A' for num, pep in enumerate(peptides, start = 1)])
 
-	# hlalist.remove('DRB3*03:02')
-	hlas = ','.join(list(set(hlalist)))
-
 	# TODO group peptide by sizes and run each size separate
 
 	sizes = '15'
-	output = submit_cmd_to_API_classII(peptides, hlas, sizes)
+	header = '\t'.join(['allele', 'seq_num', 'start', 'end', 'length', 'core_peptide', 'peptide', 'score', 'rank'])
+	concat_output = header + '\n' 
 
-	# Dealing with invalid HLAs
-	while 'Invalid' in output:
-		invalid_hla = output.split('\n')[0].split()[-2].replace('-', '/')
-		hlalist.remove(invalid_hla)
-		hlas = ','.join(list(set(hlalist)))
-		output = submit_cmd_to_API_classII(peptides, hlas, sizes)
+	for hla in hlalist:
+		output = submit_cmd_to_API_classII(peptides, hla, sizes)
+
+		if 'Invalid' not in output:
+			concat_output += '\n'.join(output.split('\n')[1:])
 
 	with open(outputname, 'w') as out:
-		out.write(output.replace('\t', ','))
+		out.write(concat_output.replace('\t', ','))
 
 	return
 # -----------------------------------------------------------------------------
@@ -296,7 +334,34 @@ def parse_cmd_line():
 
 	return cmd_parse.parse_args()
 # -----------------------------------------------------------------------------
+def split_df_hla_class(df):
 
+	# Get HLAs from df
+	flat_list_hlas = [item for sublist in df.values for item in sublist if not pd.isna(item)]
+
+	# ID the HLA class
+	hla_class = set([get_hla_class(hla) for hla in flat_list_hlas])
+
+	if len(hla_class) == 2:
+		mask_abc = df.apply(lambda row: row.astype(str).str.contains(r'A\*|B\*|C\*').any(), axis=1)
+		mask_d   = df.apply(lambda row: row.astype(str).str.contains(r'^D').any(), axis=1)
+
+		df_mhci = df[mask_abc]
+		df_mhcii   = df[mask_d]	
+		
+		return [df_mhci, df_mhcii]
+	else:
+		return [df]
+# -----------------------------------------------------------------------------
+def get_hla_id(df):
+	# Get HLAs from df
+	flat_list_hlas = [item for sublist in df.values for item in sublist if not pd.isna(item)]
+
+	# ID the HLA class
+	hla_class = list(set([get_hla_class(hla) for hla in flat_list_hlas]))[0]
+
+	return hla_class
+# -----------------------------------------------------------------------------
 if __name__ == '__main__':
 
 	arg = parse_cmd_line()
@@ -305,9 +370,7 @@ if __name__ == '__main__':
 	hla_file = arg.allele_file
 	response = arg.response_file
 	predfile = arg.prediction
-	output_d = arg.output
 	rank_cut = arg.rank_cutoff 
-	response_cutoffs = arg.response_cutoff
 	rf_cutoff = arg.rel_freq 
 	p_cutoff = arg.p_value
 	autopred = arg.auto_prediction
@@ -315,123 +378,131 @@ if __name__ == '__main__':
 
 
 	# Create output path
-	os.makedirs(output_d, exist_ok=True)
+	os.makedirs(arg.output, exist_ok=True)
 
 	# Parse input files
 	df_res_orig = pd.read_csv(response, sep='\t').dropna(how='all')
 	df_hla_orig = pd.read_csv(hla_file, sep='\t', dtype=str)
 
+	list_dfs_hla = split_df_hla_class(df_hla_orig)
 
 	tmp_predfile = ''
 
-	if autopred:
-		## Running API prediction
+	for df_hla_orig in list_dfs_hla:
 
-		# Get peptides from df
-		peptides = df_res_orig['Peptide_Seq'].drop_duplicates().to_list()
-
-		# Get HLAs from df
-		flat_list_hlas = [item for sublist in df_hla_orig.values for item in sublist if not pd.isna(item)]
-
-		# ID the HLA class
-		hla_class = list(set([get_hla_class(hla) for hla in flat_list_hlas]))[0]
+		hla_class = get_hla_id(df_hla_orig)
 		
-		if hla_class == 'II':
-			tmp_predfile = 'prediction_MHC_II.tsv'
-			run_API_class_II(peptides, flat_list_hlas, tmp_predfile)
-			predfile = tmp_predfile
+		output_d = join(arg.output, 'class_' + hla_class)
 
-	if combine_chains:
-		df_hla_orig = combineAB.make_AB_combinations(df_hla_orig)
-
-	# Iterate over each peptide
-	pepmax = int(df_res_orig['Peptide #'].max())
-
-	response_cutoffs = [float(c) for c in response_cutoffs.split(',')]
-
-	# Convert the allele matrix into a 1/0 matrix (allele_input)
-	df_hla_bin = rate.hla2bin(df_hla_orig)	
-
-	for response_cutoff in response_cutoffs:
-		
-		# Creates a separate dir for each response cutoff
-		output_dir_cutoff = join(output_d, 'reads_cutoff_'+ str(response_cutoff))
-		os.makedirs(output_dir_cutoff, exist_ok=True)
-
-		for _, resrow in df_res_orig.iterrows():
-
-			# Isolates one pipeline
-			pepseq = resrow['Peptide_Seq']
-			pepnum = str(int(resrow['Peptide #'])).zfill(len(str(pepmax)))
+		if autopred:
+			## Running API prediction
 			
-			## - Running the pipeline for the peptide isolated above
-
-			# Filtering the responses for the peptide selected
-			df_res = df_res_orig[df_res_orig['Peptide_Seq'] == pepseq]
-
-			# Filter HLAs from binding prediction file
-			if predfile:
-				# List of HLA binders for the selected peptide
-				df_pred = parse_prediction_file(predfile, peptide=pepseq)
-
-				# Get list of HLA predicted as binders
-				list_of_binders = get_predicted_hla_binders(df_pred, cutoff = rank_cut)
-
-			else: 
-				list_of_binders = []
-				df_pred = pd.DataFrame()
-
-			# Convert the response input to a 1/0 matrix (response_input)
-			df_res_bin = rate.res2bin(df_res, response_cutoff)
-
-			# Iteratively grouping the HLAs 
-			iteration = 1
-			hlas_grouped = list()
-
-			# Run full rate execution: 0th iteration, original 
-			df_rate_original = rate_execution(df_res_bin, df_hla_bin, list_of_binders)
-			df_rate = df_rate_original
+			flat_list_hlas = [item for sublist in df_hla_orig.values for item in sublist if not pd.isna(item)]
 			
-			# In case RATE results are empty, create empty output files
-			if df_rate.empty:
-				write_output_files(df_rate_original, df_pred, output_dir_cutoff, pepnum, response_cutoff, rf_cutoff, p_cutoff)
-				continue
+			# Get peptides from df
+			peptides = df_res_orig['Peptide_Seq'].drop_duplicates().to_list()
+			
+			if hla_class == 'II':
+				tmp_predfile = 'prediction_MHC_II.tsv'
+				run_API_class_II(peptides, flat_list_hlas, tmp_predfile)
+				predfile = tmp_predfile
+			elif hla_class == 'I':
+				tmp_predfile = 'prediction_MHC_I.tsv'
+				run_API_class_I(peptides, flat_list_hlas, tmp_predfile)
+				predfile = tmp_predfile
 
-			# Groups HLAs while p-values decrease
-			while True:
+
+		if combine_chains:
+			df_hla_orig = combineAB.make_AB_combinations(df_hla_orig)
+
+		# Iterate over each peptide
+		pepmax = int(df_res_orig['Peptide #'].max())
+
+		response_cutoffs = [float(c) for c in arg.response_cutoff]
+
+		# Convert the allele matrix into a 1/0 matrix (allele_input)
+		df_hla_bin = rate.hla2bin(df_hla_orig)	
+
+		for response_cutoff in response_cutoffs:
+			
+			# Creates a separate dir for each response cutoff
+			output_dir_cutoff = join(output_d, 'reads_cutoff_'+ str(response_cutoff))
+			os.makedirs(output_dir_cutoff, exist_ok=True)
+
+			for _, resrow in df_res_orig.iterrows():
+
+				# Isolates one pipeline
+				pepseq = resrow['Peptide_Seq']
+				pepnum = str(int(resrow['Peptide #'])).zfill(len(str(pepmax)))
 				
-				# Get N best p-values
-				hlas_grouped = hlas_to_group(df_rate, amount=1+iteration)
+				## - Running the pipeline for the peptide isolated above
 
-				# HLA-group name for this iteration
-				hla_group_name = make_hla_group_name(hlas_grouped, str(iteration))
+				# Filtering the responses for the peptide selected
+				df_res = df_res_orig[df_res_orig['Peptide_Seq'] == pepseq]
 
-				# Update df_hla_bin
-				df_hla_bin_group = make_hla_bin_group(df_hla_bin, hlas_grouped, hla_group_name)
-				
+				# Filter HLAs from binding prediction file
 				if predfile:
-					# Update list of binders with group name 
-					list_of_binders.append(hla_group_name)
+					# List of HLA binders for the selected peptide
+					df_pred = parse_prediction_file(predfile, peptide=pepseq)
 
-				# Get RATE results
-				df_rate = rate_execution(df_res_bin, df_hla_bin_group, list_of_binders)
+					# Get list of HLA predicted as binders
+					list_of_binders = get_predicted_hla_binders(df_pred, cutoff = rank_cut)
 
-				# Stops while-loop if p-value does not decrease
-				if df_rate['Fisher_pval'].min(axis=0) >= df_rate_original['Fisher_pval'].min(axis=0):
-					break
+				else: 
+					list_of_binders = []
+					df_pred = pd.DataFrame()
 
-				# Appends group result to original RATE results
-				df_rate_original = pd.concat([df_rate_original, df_rate]).sort_values('Fisher_pval').reset_index(drop=True)
+				# Convert the response input to a 1/0 matrix (response_input)
+				df_res_bin = rate.res2bin(df_res, response_cutoff)
 
+				# Iteratively grouping the HLAs 
+				iteration = 1
+				hlas_grouped = list()
+
+				# Run full rate execution: 0th iteration, original 
+				df_rate_original = rate_execution(df_res_bin, df_hla_bin, list_of_binders)
 				df_rate = df_rate_original
+				
+				# In case RATE results are empty, create empty output files
+				if df_rate.empty:
+					write_output_files(df_rate_original, df_pred, output_dir_cutoff, pepnum, response_cutoff, rf_cutoff, p_cutoff)
+					continue
 
-				iteration += 1
+				# Groups HLAs while p-values decrease
+				while True:
+					
+					# Get N best p-values
+					hlas_grouped = hlas_to_group(df_rate, amount=1+iteration)
 
-			# Writes output files for this peptide
-			write_output_files(df_rate_original, df_pred, output_dir_cutoff, pepnum, response_cutoff, rf_cutoff, p_cutoff)
+					# HLA-group name for this iteration
+					hla_group_name = make_hla_group_name(hlas_grouped, str(iteration))
+
+					# Update df_hla_bin
+					df_hla_bin_group = make_hla_bin_group(df_hla_bin, hlas_grouped, hla_group_name)
+					
+					if predfile:
+						# Update list of binders with group name 
+						list_of_binders.append(hla_group_name)
+
+					# Get RATE results
+					df_rate = rate_execution(df_res_bin, df_hla_bin_group, list_of_binders)
+
+					# Stops while-loop if p-value does not decrease
+					if df_rate['Fisher_pval'].min(axis=0) >= df_rate_original['Fisher_pval'].min(axis=0):
+						break
+
+					# Appends group result to original RATE results
+					df_rate_original = pd.concat([df_rate_original, df_rate]).sort_values('Fisher_pval').reset_index(drop=True)
+
+					df_rate = df_rate_original
+
+					iteration += 1
+
+				# Writes output files for this peptide
+				write_output_files(df_rate_original, df_pred, output_dir_cutoff, pepnum, response_cutoff, rf_cutoff, p_cutoff)
 
 
-create_summary_files(output_d)
+		create_summary_files(output_d)
 
-if tmp_predfile:
-	os.remove(tmp_predfile)
+		if tmp_predfile:
+			os.remove(tmp_predfile)
