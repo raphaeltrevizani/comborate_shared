@@ -418,7 +418,7 @@ if __name__ == '__main__':
 		# Iterate over each peptide
 		pepmax = int(df_res_orig['Peptide #'].max())
 
-		response_cutoffs = [float(c) for c in arg.response_cutoff]
+		response_cutoffs = [float(c) for c in arg.response_cutoff.split(',')]
 
 		# Convert the allele matrix into a 1/0 matrix (allele_input)
 		df_hla_bin = rate.hla2bin(df_hla_orig)	
@@ -461,8 +461,9 @@ if __name__ == '__main__':
 
 				# Run full rate execution: 0th iteration, original 
 				df_rate_original = rate_execution(df_res_bin, df_hla_bin, list_of_binders)
+				df_rate_original = df_rate_original[df_rate_original['Relative_freq'] >= rf_cutoff]
 				df_rate = df_rate_original
-				
+
 				# In case RATE results are empty, create empty output files
 				if df_rate.empty:
 					write_output_files(df_rate_original, df_pred, output_dir_cutoff, pepnum, response_cutoff, rf_cutoff, p_cutoff)
