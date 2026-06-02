@@ -10,11 +10,24 @@ import argparse
 import combineAB
 import subprocess
 # Adds the src directory to the python path
-src_dir = join(os.getcwd(), 'src')
-sys.path.append(src_dir)
+# src_dir = join(os.getcwd(), 'src')
+# sys.path.append(src_dir)
 
 import rate
+import HLA_standard
+# --------------------------------------------------
+def assert_same_donors(df_mhc, df_cln):
 
+	'''
+		Removes from df_hla donors that are 
+		not found in df_tcr, and vice-versa
+	'''
+
+	common = df_mhc.columns.intersection(df_cln.columns)
+	df_mhc = df_mhc[common]
+	df_cln = df_cln[['Peptide #', 'Peptide_ID', 'Peptide_Seq'] + list(df_cln[common])] 
+
+	return df_mhc, df_cln
 
 # ---------------------------------------------------------------------------
 def make_summary_file(comboratefiles):
@@ -377,12 +390,15 @@ if __name__ == '__main__':
 	combine_chains = arg.combine_AB_chains
 
 
+
 	# Create output path
 	os.makedirs(arg.output, exist_ok=True)
 
 	# Parse input files
 	df_res_orig = pd.read_csv(response, sep='\t').dropna(how='all')
 	df_hla_orig = pd.read_csv(hla_file, sep='\t', dtype=str)
+	df_hla_orig = df_hla_orig.map(HLA_standard.standardize_name)
+	df_hla_orig, df_res_orig = assert_same_donors(df_cln=df_res_orig, df_mhc=df_hla_orig)
 
 	list_dfs_hla = split_df_hla_class(df_hla_orig)
 
@@ -422,7 +438,7 @@ if __name__ == '__main__':
 
 		# Convert the allele matrix into a 1/0 matrix (allele_input)
 		df_hla_bin = rate.hla2bin(df_hla_orig)	
-
+		df_hla_bin = df_hla_bin.fillna(0)
 		for response_cutoff in response_cutoffs:
 			
 			# Creates a separate dir for each response cutoff
