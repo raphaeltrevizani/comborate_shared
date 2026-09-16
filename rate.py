@@ -36,10 +36,12 @@ def hla2bin(df_hla_txt):
 	df_hla_bin.columns.name = None
 
 	# step 2.B: check if all loci are typed for a donor. NaN if not
-	loci_required = {'DR', 'DQ', 'DP'}
+	# loci_required = {'A', 'B', 'C', 'DR', 'DQ', 'DP'}
+	allele_locus = df_hla_bin.index.str[:2]
+	all_loci = set(allele_locus)
 	for donor in df_hla_bin.columns:
 		loci_present = df_hla_txt[donor].str[:2]
-		missing_loci = loci_required.difference(set(loci_present.to_list()))
+		missing_loci = all_loci.difference(set(loci_present.to_list()))
 		if missing_loci:
 			for missing_locus in missing_loci:
 				missing_hla = df_hla_bin.index.str.contains(missing_locus)
@@ -55,7 +57,7 @@ def compute_AR_scores(df_res, df_hla):
 		for pep, res_row in df_res.iterrows():
 			valid = hla_row.notna() & res_row.notna()
 			x, y = hla_row[valid], res_row[valid]
-			res[hla+'_'+pep] = {
+			res[hla+'_'+str(pep)] = {
 				'A+R+': ((x>=1) & (y>=1)).sum(),
 				'A-R+': ((x==0) & (y>=1)).sum(),
 				'A+R-': ((x>=1) & (y==0)).sum(),
