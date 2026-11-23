@@ -438,7 +438,7 @@ if __name__ == '__main__':
 
 		# Convert the allele matrix into a 1/0 matrix (allele_input)
 		df_hla_bin = rate.hla2bin(df_hla_orig)	
-		df_hla_bin = df_hla_bin.fillna(0)
+		# df_hla_bin = df_hla_bin.fillna(0)
 		for response_cutoff in response_cutoffs:
 			
 			# Creates a separate dir for each response cutoff
