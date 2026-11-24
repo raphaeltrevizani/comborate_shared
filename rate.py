@@ -35,17 +35,19 @@ def hla2bin(df_hla_txt):
 	df_hla_bin.index.name = None
 	df_hla_bin.columns.name = None
 
-	# step 2.B: check if all loci are typed for a donor. NaN if not
-	# loci_required = {'A', 'B', 'C', 'DR', 'DQ', 'DP'}
+	# step 2.B: a donor with no known typing at a locus is "unknown" (NaN) for
+	# that locus's alleles, not allele-negative. Applies to every locus present
+	# in the data (class I and II): a missing / n/a typing is excluded from that
+	# locus's analysis rather than silently counted as an absence. The 2-char
+	# locus key groups DRB1/3/4/5 together as DR, so a donor typed for DRB1 is
+	# not penalised for lacking the optional DRB3/4/5.
 	allele_locus = df_hla_bin.index.str[:2]
 	all_loci = set(allele_locus)
 	for donor in df_hla_bin.columns:
-		loci_present = df_hla_txt[donor].str[:2]
-		missing_loci = all_loci.difference(set(loci_present.to_list()))
+		typed_loci = set(df_hla_txt[donor].dropna().str[:2])
+		missing_loci = all_loci.difference(typed_loci)
 		if missing_loci:
-			for missing_locus in missing_loci:
-				missing_hla = df_hla_bin.index.str.contains(missing_locus)
-				df_hla_bin.loc[missing_hla, donor] = np.nan
+			df_hla_bin.loc[allele_locus.isin(missing_loci), donor] = np.nan
 
 	return df_hla_bin
 
@@ -57,7 +59,7 @@ def compute_AR_scores(df_res, df_hla):
 		for pep, res_row in df_res.iterrows():
 			valid = hla_row.notna() & res_row.notna()
 			x, y = hla_row[valid], res_row[valid]
-			res[hla+'_'+str(pep)] = {
+			res[hla+'_'+pep] = {
 				'A+R+': ((x>=1) & (y>=1)).sum(),
 				'A-R+': ((x==0) & (y>=1)).sum(),
 				'A+R-': ((x>=1) & (y==0)).sum(),

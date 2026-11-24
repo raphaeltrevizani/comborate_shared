@@ -9,6 +9,7 @@ from os.path import join
 import argparse
 import combineAB
 import subprocess
+from typing import Optional
 # Adds the src directory to the python path
 # src_dir = join(os.getcwd(), 'src')
 # sys.path.append(src_dir)
@@ -158,22 +159,29 @@ def make_hla_bin_group(df_hla, hla_grouped:list, hla_group_name:str):
 	
 	df_hla_cp = df_hla.copy()
 
-	# Identifies donors with 1 in binary matrix (ie, express HLAs in group)
-	cols_with_ones = df_hla_cp.loc[df_hla_cp.index.isin(hla_grouped)].any(axis=0)
-	
-	# Make a new row with new HLA-group name. Donors will be the same as above
-	df_hla_cp.loc[hla_group_name] = cols_with_ones.astype(int)
+	# Previous grouping logic treated unknown typing as absence.
+	# cols_with_ones = df_hla_cp.loc[df_hla_cp.index.isin(hla_grouped)].any(axis=0)
+	# df_hla_cp.loc[hla_group_name] = cols_with_ones.astype(int)
+
+	members = df_hla_cp.loc[df_hla_cp.index.isin(hla_grouped)]
+	has_allele = members.eq(1).any(axis=0)
+	has_unknown = members.isna().any(axis=0)
+
+	# A known positive determines group membership even with incomplete typing.
+	df_hla_cp.loc[hla_group_name] = has_allele.astype(float).mask(
+		~has_allele & has_unknown
+	)
 	
 	# Returns only the new row
 	return df_hla_cp.loc[df_hla_cp.index == hla_group_name]
 
 # -----------------------------------------------------------------------------
-def rate_execution(df_res_bin, df_hla_bin, binders_list:list):
+def rate_execution(df_res_bin, df_hla_bin, binders_list:Optional[list]):
 
 	'''
 		Runs a full rate execution using the 
 		response and HLA information (binary matrix)
-		Binders are filtered 
+		Filter to the provided binders. None disables prediction filtering.
 	'''
 
 	# Compute A+R+, ..., A-R-
@@ -186,7 +194,7 @@ def rate_execution(df_res_bin, df_hla_bin, binders_list:list):
 	df_rate = rm_neg_rf(df_rate)
 
 	# Removes non-binding HLAs (ie, not predicted to bind and not grouped)
-	if binders_list:
+	if binders_list is not None:
 		df_rate = rm_non_binding_hla(df_rate, binders_list)
 
 	return df_rate
@@ -348,23 +356,18 @@ def parse_cmd_line():
 	return cmd_parse.parse_args()
 # -----------------------------------------------------------------------------
 def split_df_hla_class(df):
+	"""Split mixed typing by allele class while keeping donor columns."""
+	cell_classes = df.map(get_hla_class, na_action='ignore')
+	class_i = cell_classes.eq('I')
+	class_ii = cell_classes.eq('II')
 
-	# Get HLAs from df
-	flat_list_hlas = [item for sublist in df.values for item in sublist if not pd.isna(item)]
-
-	# ID the HLA class
-	hla_class = set([get_hla_class(hla) for hla in flat_list_hlas])
-
-	if len(hla_class) == 2:
-		mask_abc = df.apply(lambda row: row.astype(str).str.contains(r'A\*|B\*|C\*').any(), axis=1)
-		mask_d   = df.apply(lambda row: row.astype(str).str.contains(r'^D').any(), axis=1)
-
-		df_mhci = df[mask_abc]
-		df_mhcii   = df[mask_d]	
-		
-		return [df_mhci, df_mhcii]
-	else:
+	if not class_i.to_numpy().any() or not class_ii.to_numpy().any():
 		return [df]
+
+	return [
+		df.where(class_i).dropna(how='all'),
+		df.where(class_ii).dropna(how='all'),
+	]
 # -----------------------------------------------------------------------------
 def get_hla_id(df):
 	# Get HLAs from df
@@ -465,7 +468,7 @@ if __name__ == '__main__':
 					list_of_binders = get_predicted_hla_binders(df_pred, cutoff = rank_cut)
 
 				else: 
-					list_of_binders = []
+					list_of_binders = None
 					df_pred = pd.DataFrame()
 
 				# Convert the response input to a 1/0 matrix (response_input)
